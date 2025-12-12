@@ -98,14 +98,11 @@ function onHumanMove(e) {
 
 // ===== 電腦（先用最簡單版本）=====
 function aiMove() {
+function aiMove() {
   if (finished) return;
 
-  for (let i = 0; i < 9; i++) {
-    if (board[i] === "") {
-      board[i] = AI;
-      break;
-    }
-  }
+  const move = chooseAIMove(board);
+  if (move !== -1) board[move] = AI;
 
   let r = checkResult(board);
   if (r.type === "WIN") {
@@ -127,6 +124,37 @@ function aiMove() {
   render();
 }
 
+function chooseAIMove(bd) {
+  const empties = bd.map((v, i) => (v === "" ? i : -1)).filter(i => i !== -1);
+
+  // 1) 先找「我能贏」的一步
+  for (const i of empties) {
+    bd[i] = AI;
+    const r = checkResult(bd);
+    bd[i] = "";
+    if (r.type === "WIN" && r.winner === AI) return i;
+  }
+
+  // 2) 再找「對方快贏」的一步（阻擋）
+  for (const i of empties) {
+    bd[i] = HUMAN;
+    const r = checkResult(bd);
+    bd[i] = "";
+    if (r.type === "WIN" && r.winner === HUMAN) return i;
+  }
+
+  // 3) 中心
+  if (bd[4] === "") return 4;
+
+  // 4) 角落
+  const corners = [0, 2, 6, 8].filter(i => bd[i] === "");
+  if (corners.length) return corners[Math.floor(Math.random() * corners.length)];
+
+  // 5) 其他
+  if (empties.length) return empties[Math.floor(Math.random() * empties.length)];
+  return -1;
+}
+
 // ===== 控制 =====
 function restartGame() {
   board = Array(9).fill("");
@@ -146,3 +174,4 @@ restartGame();
 
 btnRestart.onclick = restartGame;
 btnResetScore.onclick = resetScore;
+
