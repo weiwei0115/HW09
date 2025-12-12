@@ -1,4 +1,3 @@
-// ===== DOM =====
 const gridEl = document.getElementById("grid");
 const statusEl = document.getElementById("status");
 const btnRestart = document.getElementById("btnRestart");
@@ -8,7 +7,6 @@ const xWinsEl = document.getElementById("xWins");
 const oWinsEl = document.getElementById("oWins");
 const drawsEl = document.getElementById("draws");
 
-// ===== Game Config =====
 const HUMAN = "X";
 const AI = "O";
 
@@ -18,192 +16,157 @@ const winLines = [
   [0,4,8],[2,4,6]
 ];
 
-// ===== State =====
-let board = Array(9).fill("");
-let finished = false;
-let locked = false; // 防止人類在電腦思考/落子時狂點
-let score = { X: 0, O: 0, D: 0 };
+let board, finished, locked;
+let score = { X:0, O:0, D:0 };
 
-// ===== UI =====
 function buildGrid() {
   gridEl.innerHTML = "";
   for (let i = 0; i < 9; i++) {
-    const cell = document.createElement("div");
-    cell.className = "cell";
-    cell.dataset.idx = String(i);
-    cell.addEventListener("click", onCellClick);
-    gridEl.appendChild(cell);
+    const c = document.createElement("div");
+    c.className = "cell";
+    c.dataset.idx = i;
+    c.onclick = onCellClick;
+    gridEl.appendChild(c);
   }
 }
 
 function render() {
-  const cells = gridEl.querySelectorAll(".cell");
-  cells.forEach((c, i) => {
+  document.querySelectorAll(".cell").forEach((c,i)=>{
     c.textContent = board[i];
     c.classList.toggle("disabled", finished || locked || board[i] !== "");
     c.classList.remove("win");
   });
-
-  xWinsEl.textContent = String(score.X);
-  oWinsEl.textContent = String(score.O);
-  drawsEl.textContent = String(score.D);
+  xWinsEl.textContent = score.X;
+  oWinsEl.textContent = score.O;
+  drawsEl.textContent = score.D;
 }
 
-// ===== Result Check =====
-function getResult(b) {
-  for (const line of winLines) {
-    const [a, c, d] = line;
-    if (b[a] && b[a] === b[c] && b[a] === b[d]) {
-      return { type: "WIN", winner: b[a], line };
+function getResult(b){
+  for (const l of winLines){
+    const [a,b1,c] = l;
+    if (b[a] && b[a] === b[b1] && b[a] === b[c]) {
+      return { type:"WIN", winner:b[a], line:l };
     }
   }
-  if (b.every(v => v !== "")) return { type: "DRAW" };
-  return { type: "NONE" };
+  if (b.every(v=>v)) return { type:"DRAW" };
+  return { type:"NONE" };
 }
 
-function highlightWin(line) {
-  const cells = gridEl.querySelectorAll(".cell");
-  line.forEach(i => cells[i].classList.add("win"));
+function highlight(line){
+  document.querySelectorAll(".cell").forEach((c,i)=>{
+    if (line.includes(i)) c.classList.add("win");
+  });
 }
 
-// ===== Human Move =====
-function onCellClick(e) {
+function onCellClick(e){
   if (finished || locked) return;
+  const i = +e.target.dataset.idx;
+  if (board[i]) return;
 
-  const idx = Number(e.currentTarget.dataset.idx);
-  if (Number.isNaN(idx) || board[idx] !== "") return;
-
-  // Human places X
-  board[idx] = HUMAN;
-
-  // Check after human move
-  const r1 = getResult(board);
-  if (r1.type === "WIN") {
+  board[i] = HUMAN;
+  let r = getResult(board);
+  if (r.type === "WIN") {
     finished = true;
-    score[HUMAN] += 1;
-    statusEl.innerHTML = `結果：你獲勝 <b>（X）</b>`;
-    render();
-    highlightWin(r1.line);
-    return;
+    score.X++;
+    statusEl.innerHTML = "你獲勝（X）";
+    render(); highlight(r.line); return;
   }
-  if (r1.type === "DRAW") {
+  if (r.type === "DRAW") {
     finished = true;
-    score.D += 1;
-    statusEl.innerHTML = `結果：<b>平手</b>`;
-    render();
-    return;
+    score.D++;
+    statusEl.innerHTML = "平手";
+    render(); return;
   }
 
-  // AI turn
-  statusEl.innerHTML = `電腦回合：<b>O</b>`;
   locked = true;
+  statusEl.innerHTML = "電腦回合（O）";
   render();
 
-  // 做一點點延遲，體感更自然
-  setTimeout(() => {
-    aiMove();
-  }, 220);
+  setTimeout(aiMove, 300);
 }
 
-// ===== AI =====
-function aiMove() {
-  if (finished) return;
+function aiMove(){
+  const move = findBestMove([...board]);
+  if (move !== -1) board[move] = AI;
 
-  const best = findBestMove(board);
-  if (best !== -1) board[best] = AI;
-
-  const r2 = getResult(board);
-  if (r2.type === "WIN") {
+  let r = getResult(board);
+  if (r.type === "WIN") {
     finished = true;
-    score[AI] += 1;
-    statusEl.innerHTML = `結果：電腦獲勝 <b>（O）</b>`;
+    score.O++;
+    statusEl.innerHTML = "電腦獲勝（O）";
     locked = false;
-    render();
-    highlightWin(r2.line);
-    return;
+    render(); highlight(r.line); return;
   }
-  if (r2.type === "DRAW") {
+  if (r.type === "DRAW") {
     finished = true;
-    score.D += 1;
-    statusEl.innerHTML = `結果：<b>平手</b>`;
+    score.D++;
+    statusEl.innerHTML = "平手";
     locked = false;
-    render();
-    return;
+    render(); return;
   }
 
-  // Back to human
   locked = false;
-  statusEl.innerHTML = `你的回合：<b>X</b>`;
+  statusEl.innerHTML = "你的回合（X）";
   render();
 }
 
-// Minimax: AI = maximize, HUMAN = minimize
-function findBestMove(b) {
-  let bestScore = -Infinity;
-  let bestMove = -1;
-
-  for (let i = 0; i < 9; i++) {
-    if (b[i] !== "") continue;
-
-    b[i] = AI;
-    const score = minimax(b, 0, false);
-    b[i] = "";
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMove = i;
+function findBestMove(b){
+  let best = -Infinity, move = -1;
+  for (let i=0;i<9;i++){
+    if (!b[i]){
+      b[i]=AI;
+      let score = minimax(b,0,false);
+      b[i]="";
+      if (score>best){
+        best=score; move=i;
+      }
     }
   }
-  return bestMove;
+  return move;
 }
 
-function minimax(b, depth, isMaximizing) {
-  const r = getResult(b);
-  if (r.type === "WIN") {
-    // 越早贏越高分，越早輸越低分
-    if (r.winner === AI) return 10 - depth;
-    if (r.winner === HUMAN) return depth - 10;
-  }
-  if (r.type === "DRAW") return 0;
+function minimax(b,depth,isMax){
+  let r = getResult(b);
+  if (r.type==="WIN") return r.winner===AI ? 10-depth : depth-10;
+  if (r.type==="DRAW") return 0;
 
-  if (isMaximizing) {
-    let best = -Infinity;
-    for (let i = 0; i < 9; i++) {
-      if (b[i] !== "") continue;
-      b[i] = AI;
-      best = Math.max(best, minimax(b, depth + 1, false));
-      b[i] = "";
+  if (isMax){
+    let best=-Infinity;
+    for (let i=0;i<9;i++){
+      if (!b[i]){
+        b[i]=AI;
+        best=Math.max(best,minimax(b,depth+1,false));
+        b[i]="";
+      }
     }
     return best;
   } else {
-    let best = Infinity;
-    for (let i = 0; i < 9; i++) {
-      if (b[i] !== "") continue;
-      b[i] = HUMAN;
-      best = Math.min(best, minimax(b, depth + 1, true));
-      b[i] = "";
+    let best=Infinity;
+    for (let i=0;i<9;i++){
+      if (!b[i]){
+        b[i]=HUMAN;
+        best=Math.min(best,minimax(b,depth+1,true));
+        b[i]="";
+      }
     }
     return best;
   }
 }
 
-// ===== Controls =====
-function restartGame() {
+function restartGame(){
   board = Array(9).fill("");
   finished = false;
   locked = false;
-  statusEl.innerHTML = `你的回合：<b>X</b>`;
+  statusEl.innerHTML = "你的回合（X）";
   render();
 }
 
-function resetScore() {
-  score = { X: 0, O: 0, D: 0 };
+function resetScore(){
+  score = { X:0, O:0, D:0 };
   restartGame();
 }
 
-// ===== Init =====
 buildGrid();
 restartGame();
-
-btnRestart.addEventListener("click", restartGame);
-btnResetScore.addEventListener("click", resetScore);
+btnRestart.onclick = restartGame;
+btnResetScore.onclick = resetScore;
