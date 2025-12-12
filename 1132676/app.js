@@ -98,7 +98,6 @@ function onHumanMove(e) {
 
 // ===== 電腦（先用最簡單版本）=====
 function aiMove() {
-function aiMove() {
   if (finished) return;
 
   const move = chooseAIMove(board);
@@ -174,4 +173,5 @@ restartGame();
 
 btnRestart.onclick = restartGame;
 btnResetScore.onclick = resetScore;
+
 
