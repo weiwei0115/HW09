@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OX 棋（玩家 vs 電腦）</title>
+  <title>1132676_HW09</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -17,12 +17,21 @@
         </div>
 
         <div class="controls">
+          <label class="selectWrap">
+            <span>難度</span>
+            <select id="difficulty">
+              <option value="easy">簡單</option>
+              <option value="normal" selected>普通</option>
+              <option value="hard">困難</option>
+            </select>
+          </label>
+
           <button id="btnRestart">重新開始</button>
           <button id="btnResetScore">重置記分</button>
         </div>
       </div>
 
-      <div class="status" id="status">你的回合：<b>X</b></div>
+      <div class="status" id="status">你的回合（X）</div>
 
       <div class="grid" id="grid" aria-label="TicTacToe board"></div>
 
