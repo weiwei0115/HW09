@@ -1,4 +1,4 @@
-const gridEl = document.getElementById("grid");
+const grid = document.getElementById("grid");
 const statusEl = document.getElementById("status");
 const btnRestart = document.getElementById("btnRestart");
 const btnResetScore = document.getElementById("btnResetScore");
@@ -16,157 +16,133 @@ const winLines = [
   [0,4,8],[2,4,6]
 ];
 
-let board, finished, locked;
+let board = [];
+let finished = false;
 let score = { X:0, O:0, D:0 };
 
+// ===== 初始化棋盤 =====
 function buildGrid() {
-  gridEl.innerHTML = "";
+  grid.innerHTML = "";
   for (let i = 0; i < 9; i++) {
-    const c = document.createElement("div");
-    c.className = "cell";
-    c.dataset.idx = i;
-    c.onclick = onCellClick;
-    gridEl.appendChild(c);
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.dataset.i = i;
+    cell.onclick = onHumanMove;
+    grid.appendChild(cell);
   }
 }
 
+// ===== 畫面更新 =====
 function render() {
-  document.querySelectorAll(".cell").forEach((c,i)=>{
+  document.querySelectorAll(".cell").forEach((c, i) => {
     c.textContent = board[i];
-    c.classList.toggle("disabled", finished || locked || board[i] !== "");
+    c.classList.toggle("disabled", finished || board[i] !== "");
     c.classList.remove("win");
   });
+
   xWinsEl.textContent = score.X;
   oWinsEl.textContent = score.O;
   drawsEl.textContent = score.D;
 }
 
-function getResult(b){
-  for (const l of winLines){
-    const [a,b1,c] = l;
-    if (b[a] && b[a] === b[b1] && b[a] === b[c]) {
-      return { type:"WIN", winner:b[a], line:l };
+// ===== 勝負判斷（已確認安全）=====
+function checkResult(bd) {
+  for (const line of winLines) {
+    const [i1, i2, i3] = line;
+    if (
+      bd[i1] &&
+      bd[i1] === bd[i2] &&
+      bd[i1] === bd[i3]
+    ) {
+      return { type: "WIN", winner: bd[i1], line };
     }
   }
-  if (b.every(v=>v)) return { type:"DRAW" };
-  return { type:"NONE" };
+  if (bd.every(v => v !== "")) return { type: "DRAW" };
+  return { type: "NONE" };
 }
 
-function highlight(line){
-  document.querySelectorAll(".cell").forEach((c,i)=>{
+function highlight(line) {
+  document.querySelectorAll(".cell").forEach((c, i) => {
     if (line.includes(i)) c.classList.add("win");
   });
 }
 
-function onCellClick(e){
-  if (finished || locked) return;
-  const i = +e.target.dataset.idx;
-  if (board[i]) return;
+// ===== 玩家 =====
+function onHumanMove(e) {
+  if (finished) return;
+
+  const i = Number(e.target.dataset.i);
+  if (board[i] !== "") return;
 
   board[i] = HUMAN;
-  let r = getResult(board);
+
+  let r = checkResult(board);
   if (r.type === "WIN") {
     finished = true;
     score.X++;
-    statusEl.innerHTML = "你獲勝（X）";
-    render(); highlight(r.line); return;
+    statusEl.textContent = "你獲勝（X）";
+    render(); highlight(r.line);
+    return;
   }
   if (r.type === "DRAW") {
     finished = true;
     score.D++;
-    statusEl.innerHTML = "平手";
-    render(); return;
+    statusEl.textContent = "平手";
+    render();
+    return;
   }
 
-  locked = true;
-  statusEl.innerHTML = "電腦回合（O）";
-  render();
-
-  setTimeout(aiMove, 300);
+  // 電腦立刻下
+  aiMove();
 }
 
-function aiMove(){
-  const move = findBestMove([...board]);
-  if (move !== -1) board[move] = AI;
+// ===== 電腦（先用最簡單版本）=====
+function aiMove() {
+  if (finished) return;
 
-  let r = getResult(board);
+  for (let i = 0; i < 9; i++) {
+    if (board[i] === "") {
+      board[i] = AI;
+      break;
+    }
+  }
+
+  let r = checkResult(board);
   if (r.type === "WIN") {
     finished = true;
     score.O++;
-    statusEl.innerHTML = "電腦獲勝（O）";
-    locked = false;
-    render(); highlight(r.line); return;
+    statusEl.textContent = "電腦獲勝（O）";
+    render(); highlight(r.line);
+    return;
   }
   if (r.type === "DRAW") {
     finished = true;
     score.D++;
-    statusEl.innerHTML = "平手";
-    locked = false;
-    render(); return;
+    statusEl.textContent = "平手";
+    render();
+    return;
   }
 
-  locked = false;
-  statusEl.innerHTML = "你的回合（X）";
+  statusEl.textContent = "你的回合（X）";
   render();
 }
 
-function findBestMove(b){
-  let best = -Infinity, move = -1;
-  for (let i=0;i<9;i++){
-    if (!b[i]){
-      b[i]=AI;
-      let score = minimax(b,0,false);
-      b[i]="";
-      if (score>best){
-        best=score; move=i;
-      }
-    }
-  }
-  return move;
-}
-
-function minimax(b,depth,isMax){
-  let r = getResult(b);
-  if (r.type==="WIN") return r.winner===AI ? 10-depth : depth-10;
-  if (r.type==="DRAW") return 0;
-
-  if (isMax){
-    let best=-Infinity;
-    for (let i=0;i<9;i++){
-      if (!b[i]){
-        b[i]=AI;
-        best=Math.max(best,minimax(b,depth+1,false));
-        b[i]="";
-      }
-    }
-    return best;
-  } else {
-    let best=Infinity;
-    for (let i=0;i<9;i++){
-      if (!b[i]){
-        b[i]=HUMAN;
-        best=Math.min(best,minimax(b,depth+1,true));
-        b[i]="";
-      }
-    }
-    return best;
-  }
-}
-
-function restartGame(){
+// ===== 控制 =====
+function restartGame() {
   board = Array(9).fill("");
   finished = false;
-  locked = false;
-  statusEl.innerHTML = "你的回合（X）";
+  statusEl.textContent = "你的回合（X）";
   render();
 }
 
-function resetScore(){
+function resetScore() {
   score = { X:0, O:0, D:0 };
   restartGame();
 }
 
+// ===== 啟動 =====
 buildGrid();
 restartGame();
+
 btnRestart.onclick = restartGame;
 btnResetScore.onclick = resetScore;
