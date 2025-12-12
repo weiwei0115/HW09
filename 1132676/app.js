@@ -2,6 +2,7 @@ const grid = document.getElementById("grid");
 const statusEl = document.getElementById("status");
 const btnRestart = document.getElementById("btnRestart");
 const btnResetScore = document.getElementById("btnResetScore");
+const difficultyEl = document.getElementById("difficulty");
 
 const xWinsEl = document.getElementById("xWins");
 const oWinsEl = document.getElementById("oWins");
@@ -32,7 +33,7 @@ function buildGrid() {
   }
 }
 
-// ===== 畫面更新 =====
+// ===== UI 更新 =====
 function render() {
   document.querySelectorAll(".cell").forEach((c, i) => {
     c.textContent = board[i];
@@ -45,15 +46,17 @@ function render() {
   drawsEl.textContent = score.D;
 }
 
-// ===== 勝負判斷（已確認安全）=====
+function highlight(line) {
+  document.querySelectorAll(".cell").forEach((c, i) => {
+    if (line.includes(i)) c.classList.add("win");
+  });
+}
+
+// ===== 勝負判斷 =====
 function checkResult(bd) {
   for (const line of winLines) {
     const [i1, i2, i3] = line;
-    if (
-      bd[i1] &&
-      bd[i1] === bd[i2] &&
-      bd[i1] === bd[i3]
-    ) {
+    if (bd[i1] && bd[i1] === bd[i2] && bd[i1] === bd[i3]) {
       return { type: "WIN", winner: bd[i1], line };
     }
   }
@@ -61,13 +64,7 @@ function checkResult(bd) {
   return { type: "NONE" };
 }
 
-function highlight(line) {
-  document.querySelectorAll(".cell").forEach((c, i) => {
-    if (line.includes(i)) c.classList.add("win");
-  });
-}
-
-// ===== 玩家 =====
+// ===== 玩家落子 =====
 function onHumanMove(e) {
   if (finished) return;
 
@@ -92,18 +89,33 @@ function onHumanMove(e) {
     return;
   }
 
-  // 電腦立刻下
-  aiMove();
+  statusEl.textContent = "電腦回合（O）";
+  render();
+
+  // 小延遲更像真人
+  setTimeout(aiMove, 220);
 }
 
-// ===== 電腦（先用最簡單版本）=====
+// ===== 電腦落子（依難度）=====
 function aiMove() {
   if (finished) return;
 
-  const move = chooseAIMove(board);
+  const diff = difficultyEl ? difficultyEl.value : "normal";
+  let move = -1;
+
+  if (diff === "easy") {
+    move = randomMove(board);
+  } else if (diff === "normal") {
+    // 普通：能贏先贏 / 必擋先擋，其他用「人類風」策略
+    move = winOrBlockMove(board);
+    if (move === -1) move = heuristicMove(board);
+  } else { // hard
+    move = findBestMove(board); // Minimax
+  }
+
   if (move !== -1) board[move] = AI;
 
-  let r = checkResult(board);
+  const r = checkResult(board);
   if (r.type === "WIN") {
     finished = true;
     score.O++;
@@ -123,10 +135,20 @@ function aiMove() {
   render();
 }
 
-function chooseAIMove(bd) {
-  const empties = bd.map((v, i) => (v === "" ? i : -1)).filter(i => i !== -1);
+// ===== 難度：簡單（隨機）=====
+function randomMove(bd) {
+  const empties = [];
+  for (let i = 0; i < 9; i++) if (bd[i] === "") empties.push(i);
+  if (!empties.length) return -1;
+  return empties[Math.floor(Math.random() * empties.length)];
+}
 
-  // 1) 先找「我能贏」的一步
+// ===== 難度：普通（先贏/先擋）=====
+function winOrBlockMove(bd) {
+  const empties = [];
+  for (let i = 0; i < 9; i++) if (bd[i] === "") empties.push(i);
+
+  // 1) 我能贏
   for (const i of empties) {
     bd[i] = AI;
     const r = checkResult(bd);
@@ -134,7 +156,7 @@ function chooseAIMove(bd) {
     if (r.type === "WIN" && r.winner === AI) return i;
   }
 
-  // 2) 再找「對方快贏」的一步（阻擋）
+  // 2) 我必須擋
   for (const i of empties) {
     bd[i] = HUMAN;
     const r = checkResult(bd);
@@ -142,16 +164,70 @@ function chooseAIMove(bd) {
     if (r.type === "WIN" && r.winner === HUMAN) return i;
   }
 
-  // 3) 中心
+  return -1;
+}
+
+// 普通難度的「人類風」策略（中心→角落→邊）
+function heuristicMove(bd) {
   if (bd[4] === "") return 4;
 
-  // 4) 角落
-  const corners = [0, 2, 6, 8].filter(i => bd[i] === "");
+  const corners = [0,2,6,8].filter(i => bd[i] === "");
   if (corners.length) return corners[Math.floor(Math.random() * corners.length)];
 
-  // 5) 其他
-  if (empties.length) return empties[Math.floor(Math.random() * empties.length)];
-  return -1;
+  const edges = [1,3,5,7].filter(i => bd[i] === "");
+  if (edges.length) return edges[Math.floor(Math.random() * edges.length)];
+
+  return randomMove(bd);
+}
+
+// ===== 困難：Minimax（最佳解）=====
+function availableMoves(bd) {
+  const moves = [];
+  for (let i = 0; i < 9; i++) if (bd[i] === "") moves.push(i);
+  return moves;
+}
+
+function findBestMove(bd) {
+  let bestScore = -Infinity;
+  let bestMove = -1;
+
+  for (const i of availableMoves(bd)) {
+    bd[i] = AI;
+    const score = minimax(bd, 0, false);
+    bd[i] = "";
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = i;
+    }
+  }
+  return bestMove;
+}
+
+function minimax(bd, depth, isMaximizing) {
+  const r = checkResult(bd);
+
+  if (r.type === "WIN") {
+    return r.winner === AI ? (10 - depth) : (depth - 10);
+  }
+  if (r.type === "DRAW") return 0;
+
+  if (isMaximizing) {
+    let best = -Infinity;
+    for (const i of availableMoves(bd)) {
+      bd[i] = AI;
+      best = Math.max(best, minimax(bd, depth + 1, false));
+      bd[i] = "";
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const i of availableMoves(bd)) {
+      bd[i] = HUMAN;
+      best = Math.min(best, minimax(bd, depth + 1, true));
+      bd[i] = "";
+    }
+    return best;
+  }
 }
 
 // ===== 控制 =====
@@ -167,11 +243,13 @@ function resetScore() {
   restartGame();
 }
 
-// ===== 啟動 =====
 buildGrid();
 restartGame();
 
 btnRestart.onclick = restartGame;
 btnResetScore.onclick = resetScore;
 
-
+// 若切換難度，建議直接開新局（避免狀態混亂）
+if (difficultyEl) {
+  difficultyEl.onchange = () => restartGame();
+}
